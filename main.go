@@ -1,16 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
 
 // PaxMessage representation
 type PaxMessage struct {
-	Callsign, Subject, Description string
+	Callsign    string `json:"callsign"`
+	Subject     string `json:"subject"`
+	Description string `json:"description"`
 }
 
 func main() {
@@ -25,14 +30,34 @@ func main() {
 	if err != nil {
 		fmt.Println("error:", err)
 	} else {
-		sendMessage(msg)
+		code, err := sendMessage(msg)
+		if err != nil {
+			fmt.Println("error:", err)
+		} else {
+			fmt.Println("Response from API", code)
+		}
 	}
-
 }
 
 func sendMessage(msg PaxMessage) (string, error) {
 	fmt.Println("send", msg)
-	return "", nil
+
+	json, err := json.Marshal(msg)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequest("POST", "https://support.zendesk.dev/requests/emergency/create.json", bytes.NewReader(json))
+	req.Header["Content-Type"] = []string{"application/json"}
+	req.Header["Accept"] = []string{"application/json"}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+
+	return resp.Status, nil
 }
 
 func readNext(conn redis.Conn) (PaxMessage, error) {
